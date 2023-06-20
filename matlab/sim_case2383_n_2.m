@@ -13,7 +13,7 @@ end
 t_max = 100;
 
 % select data case to simulate
-load case2383_mod_ps_dyn;
+load case2383_mod_ps_dyn ps;
 ps.branch(:,C.br.tap)       = 1;
 ps.shunt(:,C.sh.factor)     = 1;
 ps.shunt(:,C.sh.status)     = 1;

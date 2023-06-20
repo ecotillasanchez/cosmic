@@ -1,5 +1,5 @@
 %% simulate 39-bus case
-clear all; close all; clc; C = psconstants;
+clearvars; clear global; close all; clc; C = psconstants;
 
 % do not touch path if we are deploying code
 if ~(ismcc || isdeployed)

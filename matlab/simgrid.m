@@ -1,11 +1,12 @@
-function [outputs,ps] = simgrid(ps,event,outfilename,opt)
-% usage: [outputs,ps] = simgrid(ps,event,outfilename,opt)
+function [outputs,ps] = simgrid(ps,event,outfilename,opt,blockout)
+% usage: [outputs,ps] = simgrid(ps,event,outfilename,opt,blockout)
 % perform a cascading failure simulation
 % inputs:
 %  ps           - powersystem structure. see psconstants.
 %  event        - a matrix defining the exogenous events to simulate. see psconstants.
 %  outfilename  - the name for the output file
 %  opt          - an option structure. see psoptions.
+%  blockout     - additional control to stop the simulation
 % outputs:
 %  outputs.         - a structure of output data, including the following:
 %    .success       - a bool flag indicating whether we were able to simulate to the end.
@@ -33,7 +34,9 @@ end
 if nargin<4 || isempty(opt)
     opt = psoptions;
 end
-
+if nargin<5 || isempty(blockout)
+    blockout = 0;
+end
 %% clean up the ps structure
 ps = updateps(ps);
 
@@ -110,7 +113,7 @@ while t < t_end
     if opt.verbose
         fprintf('\n Simulating from t=%g s to t=%g s\n',t,t_next);
     end
-    [ps,t_out,X,Y] = simgrid_interval(ps,t,t_next,x,y,opt);
+    [ps,t_out,X,Y] = simgrid_interval(ps,t,t_next,x,y,opt,blockout);
     if opt.verbose
         fprintf(' Completed simulation up until t=%g\n',t_out(end));
     end
@@ -121,7 +124,7 @@ while t < t_end
             fprintf(' Writing simulation results to %s\n',outfilename);
         end
         write_state(outfilename,t_out,X,Y);
-    end;
+    end
     
     % update time and solutions for next interval
     t = t_next;

@@ -1,4 +1,4 @@
-function [ output ] = auxiliary_funciton(local_id,ix,ps,opt)
+function [ output ] = auxiliary_function(local_id,ix,ps,opt)
 % usage: [ global_relay_id ] = auxiliary_funciton(local_id,ix,ps,opt)
 % output is the global relay id if the inputs are (local_id, 0)
 % output is the ix if the inputs are ([], 1)

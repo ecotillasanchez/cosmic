@@ -1,4 +1,4 @@
-function [ps,t_out,X,Y,blockout] = simgrid_interval(ps,t,t_next,x0,y0,opt,blockout)
+function [ps,t_out,X,Y] = simgrid_interval(ps,t,t_next,x0,y0,opt)
 % usage: [ps,t_out,X,Y] = simgrid_interval(ps,t,t_next,x0,y0,opt)
 % integrate PS DAEs from t to t_next, recursively if endogenous events
 %
@@ -8,7 +8,6 @@ function [ps,t_out,X,Y,blockout] = simgrid_interval(ps,t,t_next,x0,y0,opt,blocko
 %  t_next - end simulation time assuming no relay events.
 %  x0 and y0 - current state of the system
 %  opt - options inherited from simgrid
-%  blockout - additional control to stop the simulation
 %
 % outputs:
 %  ps - the power systems structure at the end of the simulation.
@@ -17,7 +16,7 @@ function [ps,t_out,X,Y,blockout] = simgrid_interval(ps,t,t_next,x0,y0,opt,blocko
 %  X and Y - state of the system during the integration period
 
 % constants and data
-C           = psconstants; 
+C           = psconstants;
 n           = size(ps.bus,1);
 n_macs      = size(ps.mac,1);
 m           = size(ps.branch,1);
@@ -48,16 +47,12 @@ if ~all(is_first_subgraph)
     ps2  = subsetps(ps,net2);   [x02,y02] = get_xy(ps2,opt);
 
     % step down a recursion level and solve for the two subnets
-    [ps1,t_out1,X1,Y1,blockout] = simgrid_interval(ps1,t,t_next,x01,y01,opt,blockout);
-    [ps2,t_out2,X2,Y2,blockout] = simgrid_interval(ps2,t,t_next,x02,y02,opt,blockout);
-    ps1.blockout= blockout; ps2.blockout= blockout;
+    [ps1,t_out1,X1,Y1] = simgrid_interval(ps1,t,t_next,x01,y01,opt);
+    [ps2,t_out2,X2,Y2] = simgrid_interval(ps2,t,t_next,x02,y02,opt);
+
     % aggregate the outputs from the lower recursion levels
     [ps,t_out,X,Y] = superset_odeout(ps,ps1,ps2,t_out1,t_out2,X1,Y1,X2,Y2,opt);
-    
-    % added by falah to update Y_bus after the event because
-    % superset_odeout did not update
-%     [ps.Ybus,ps.Yf,ps.Yt,ps.Yft,ps.sh_ft] = getYbus(ps,false);
-    %%%%%%%%%%%%%%%%%%%%%%%
+
 elseif (n_macs == 0 || n_shunts == 0 || (ps.shunt(:,C.sh.P)'*ps.shunt(:,C.sh.factor) == 0) || size(ps.bus(:,1),1) == 1)
     % there is no generation or load in this network, or it is just one disconnected bus
     t_out           = t;
@@ -113,8 +108,7 @@ else
                 fn_g = @(t,x,y) algebraic_eqs(t,x,y,ps,opt);
                 fn_h = @(t,xy,dt) endo_event(t,xy,ix,ps,dt,opt);
                 fn_aux= @(local_id,ix) auxiliary_function(local_id,ix,ps,opt);
-                [t_ode,X,Y,Z,blockout] = solve_dae(fn_f,fn_g,fn_h,fn_aux,x0,y0,t:opt.sim.dt_default:t_next,opt,blockout);
-%                 [t_ode,X,Y,Z] = solve_dae(fn_f,fn_g,fn_h,fn_aux,x0,y0,t:opt.sim.dt_default:t_next,opt);
+                [t_ode,X,Y,Z] = solve_dae(fn_f,fn_g,fn_h,fn_aux,x0,y0,t:opt.sim.dt_default:t_next,opt);
                 XY_ode = [X;Y]';
                 
             case 2
@@ -133,7 +127,6 @@ else
                 % explicit, ode15s
                 clear fn_fg;
                 event_handle = @(t,xy) endo_event(t,xy,ix,ps);
-%                 event_handle = @(t,xy,dt) endo_event(t,xy,ix,ps,dt,opt);
                 fn_fg = @(t,xy) differential_algebraic(t,xy,ix.nx,ps,opt);
                 mass_matrix = sparse(1:ix.nx,1:ix.nx,1,ix.nx+ix.ny,ix.nx+ix.ny);
                 options = odeset(   'Mass',mass_matrix, ...
@@ -195,9 +188,7 @@ else
         ps.branch(:,C.br.Pf) = real(Sf) * ps.baseMVA;
         ps.branch(:,C.br.Qf) = imag(Sf) * ps.baseMVA;
         ps.branch(:,C.br.Pt) = real(St) * ps.baseMVA;
-        ps.branch(:,C.br.Qt) = imag(St) * ps.baseMVA;  
-         
-       
+        ps.branch(:,C.br.Qt) = imag(St) * ps.baseMVA;        
 
         % branch power loss
         Yft = - ps.Yft;
@@ -212,53 +203,19 @@ else
         % preparation work for the emergency control
         % calculate resulting ZIPE load after the powerflow
         % get the load bus injections with a ZIPE model
-%         D               = ps.bus_i(ps.shunt(:,1));
-%         S_load_base     = (ps.shunt(:,C.sh.P) + j*ps.shunt(:,C.sh.Q)).*ps.shunt(:,C.sh.factor)/ps.baseMVA;
-%         S_load_P        = S_load_base.*ps.shunt(:,C.sh.frac_S);
-%         Sd              = sparse(D,3,S_load_P,n,5);
-%         S_load_Z        = S_load_base.*ps.shunt(:,C.sh.frac_Z);
-%         Sd              = Sd + sparse(D,1,S_load_Z,n,5);
-%         S_load_I        = S_load_base.*(1-(ps.shunt(:,C.sh.frac_Z)+ps.shunt(:,C.sh.frac_S)+ps.shunt(:,C.sh.frac_E)));
-%         Sd              = Sd + sparse(D,2,S_load_I,n,5);
-%         S_load_E        = S_load_base.*ps.shunt(:,C.sh.frac_E);
-%         Sd              = Sd + sparse(D,4,S_load_E,n,5);
-%         S_load_E_gamma  = ps.shunt(:,C.sh.gamma);
-%         Sd              = Sd + sparse(D,5,S_load_E_gamma,n,5);
-%         zipe_cols       = 5;   % assuming it is ZIPE model for now
-  
-        
-        % Falah Correction For ZIP Load Calculation:
-
         D               = ps.bus_i(ps.shunt(:,1));
-        P_load_base     = (ps.shunt(:,C.sh.P) ).*ps.shunt(:,C.sh.factor)/ps.baseMVA;
-        Q_load_base     = ( j*ps.shunt(:,C.sh.Q)).*ps.shunt(:,C.sh.factor)/ps.baseMVA;
-        
-        P_load_P        = P_load_base.*ps.shunt(:,C.sh.frac_S);
-        Q_load_P        = Q_load_base.*ps.shunt(:,C.sh.frac_Q_S);
-        S_load_P        = P_load_P+Q_load_P;
-        Sd              = sparse(D,3,S_load_P,n,5);
-        
-        P_load_Z        = P_load_base.*ps.shunt(:,C.sh.frac_Z);
-        Q_load_Z        = Q_load_base.*ps.shunt(:,C.sh.frac_Q_Z);        
-        S_load_Z        = P_load_Z+Q_load_Z;
-        Sd              = Sd + sparse(D,1,S_load_Z,n,5);
-        
-%         S_load_I        = S_load_base.*(1-(ps.shunt(:,C.sh.frac_Z)+ps.shunt(:,C.sh.frac_S)+ps.shunt(:,C.sh.frac_E)));
-        P_load_I        = P_load_base.*(1-(ps.shunt(:,C.sh.frac_Z)+ps.shunt(:,C.sh.frac_S)+ps.shunt(:,C.sh.frac_E)));
-        Q_load_I        = Q_load_base.*ps.shunt(:,C.sh.frac_Q_I);  
-        S_load_I        = P_load_I+Q_load_I;
-        Sd              = Sd + sparse(D,2,S_load_I,n,5);
-        
         S_load_base     = (ps.shunt(:,C.sh.P) + j*ps.shunt(:,C.sh.Q)).*ps.shunt(:,C.sh.factor)/ps.baseMVA;
+        S_load_P        = S_load_base.*ps.shunt(:,C.sh.frac_S);
+        Sd              = sparse(D,3,S_load_P,n,5);
+        S_load_Z        = S_load_base.*ps.shunt(:,C.sh.frac_Z);
+        Sd              = Sd + sparse(D,1,S_load_Z,n,5);
+        S_load_I        = S_load_base.*(1-(ps.shunt(:,C.sh.frac_Z)+ps.shunt(:,C.sh.frac_S)+ps.shunt(:,C.sh.frac_E)));
+        Sd              = Sd + sparse(D,2,S_load_I,n,5);
         S_load_E        = S_load_base.*ps.shunt(:,C.sh.frac_E);
         Sd              = Sd + sparse(D,4,S_load_E,n,5);
         S_load_E_gamma  = ps.shunt(:,C.sh.gamma);
         Sd              = Sd + sparse(D,5,S_load_E_gamma,n,5);
         zipe_cols       = 5;   % assuming it is ZIPE model for now
-        
-        
-        
-        
         if zipe_cols == 1
             S_zipe = Sd;
         elseif zipe_cols == 5
@@ -270,19 +227,9 @@ else
         else
             error('zipe load model matrix is not the right size');
         end
-        real_power = full(real(S_zipe)* ps.baseMVA);
-        reactive_power = full(imag(S_zipe)* ps.baseMVA);
-        counter=1;
-        for ii=1:size(real_power,1)
-            if real_power(ii)>0
-                ps.shunt(counter,C.sh.current_P) = real_power(ii);
-                ps.shunt(counter,C.sh.current_Q) = reactive_power(ii);
-                counter=counter+1;
-            end
-        end
-            
-%         ps.shunt(:,C.sh.current_P) = real(S_zipe(ps.shunt(:,C.sh.type)==1))* ps.baseMVA ;
-%         ps.shunt(:,C.sh.current_Q) = imag(S_zipe(ps.shunt(:,C.sh.type)==1))* ps.baseMVA ;
+        
+        ps.shunt(:,C.sh.current_P) = real(S_zipe(ps.shunt(:,C.sh.type)==1))* ps.baseMVA ;
+        ps.shunt(:,C.sh.current_Q) = imag(S_zipe(ps.shunt(:,C.sh.type)==1))* ps.baseMVA ;
         
         % remove temp reference bus, if needed
         if temp_ref, ps.bus(ismember(ps.bus(:,1),ps.gen(ref,1)),C.bu.type) = temp_ref; end
@@ -296,7 +243,7 @@ else
                 [ps] = process_relay_event(t_event,relay_event,ps,opt);
                 t_down = t_event + opt.sim.t_eps;
                 % step down a recursive level to continue solving from the event to t_next
-                [ps,t_out_down,X_down,Y_down,blockout] = simgrid_interval(ps,t_down,t_next,x_end,y_end,opt,blockout);
+                [ps,t_out_down,X_down,Y_down] = simgrid_interval(ps,t_down,t_next,x_end,y_end,opt);
                 
                 % merge the outputs from this recursion level and the one immediately below
                 t_out       = [t_out t_out_down];
@@ -309,9 +256,5 @@ else
             
     end
 end
-ps.blockout = blockout;
-% xy=[X(:,end);Y(:,end)];
-% [J,df_dx,df_dy,dg_dx,dg_dy] = get_jacobian(t_next,xy,ix.nx,ps,opt);
-% [EIGENV,EIGENV_D] = eig(full(J));
-% det(full(J))
+
 return

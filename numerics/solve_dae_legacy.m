@@ -1,5 +1,5 @@
-function [t_steps,X,Y,Z,blockout] = solve_dae(f,g,h,aux,x0,y0,t_span,opt,blockout)
-% usage: [t_steps,X,Y,Z,blockout] = solve_dae(f,g,h,aux,x0,y0,t_span,opt,blockout)
+function [t_steps,X,Y,Z] = solve_dae(f,g,h,aux,x0,y0,t_span,opt)
+% usage: [t_steps,X,Y,Z] = solve_dae(f,g,h,aux,x0,y0,t_span,opt)
 % this function uses the first order trapezoidal rule to solve
 % the dae defined by the following:
 %
@@ -13,8 +13,8 @@ function [t_steps,X,Y,Z,blockout] = solve_dae(f,g,h,aux,x0,y0,t_span,opt,blockou
 %  opt - options
 
 % process default inputs and outputs
-if nargin<8, opt = numerics_options; end
-if isempty(h), check_discrete=false; else, check_discrete=true; end
+if nargin<8, opt = numerics_options; end;
+if isempty(h), check_discrete=false; else check_discrete=true; end
 Z = [];
 
 global t_delay t_prev_check dist2threshold 
@@ -34,10 +34,10 @@ Y               = y0;
 xy0 = [x0;y0];
 
 unloop_delta    = 0;                 % 1 = unloop the delta so that it is within [-2*pi,2*pi]
-% opt.sim.uvls_tdelay_ini = 0.2;       % 1 sec delay for uvls relay.
-% opt.sim.ufls_tdelay_ini = 0.2;       % 1 sec delay for ufls relay.
-% opt.sim.dist_tdelay_ini = 0.5;       % 1 sec delay for dist relay.
-% opt.sim.emergency_control = 0;
+opt.sim.uvls_tdelay_ini = 0.5;       % 1 sec delay for uvls relay.
+opt.sim.ufls_tdelay_ini = 0.5;       % 1 sec delay for ufls relay.
+opt.sim.dist_tdelay_ini = 0.5;       % 1 sec delay for dist relay.
+opt.sim.emergency_control = 0;
 % find starting point
 t0 = t_span(1);
 
@@ -90,8 +90,7 @@ while t0<t_final
         end
         % bail out if we are at max number of iterations
         if newton_it == max_newton_its
-            blockout=1;
-            break
+%             break
             error(' time step did not converge...');
         end
         
@@ -101,28 +100,6 @@ while t0<t_final
         jacobian    = [trapz_df_dx trapz_df_dy;
             dg_dx1 dg_dy1];
         
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        %  The following added by Falah   % 
-        %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%         if t1>11
-%             A_sys = trapz_df_dx;
-%             A_sys = trapz_df_dx-trapz_df_dy*(dg_dy1^-1)*dg_dx1;
-%             [EIGENV,EIGENV_D] = eig(full(A_sys));
-%             eigen_v=EIGENV_D((find(EIGENV_D~=0)));
-%             eigen_v = diag(EIGENV_D);
-%             if sum(real(eigen_v)>0)
-%                 2;
-%             end
-%     %         check_eig_v= find(eigen_v>0);
-%             damping_rat=(-real(eigen_v)./sqrt(real(eigen_v).*real(eigen_v) + imag(eigen_v).*imag(eigen_v)))*100;
-%             osc_frq=imag(eigen_v)./(2*pi);
-%             E_F_D=[eigen_v osc_frq damping_rat];
-%             if det(dg_dy1)>0
-%                 2;
-%             end
-%         end
-
-
         % find the search direction
         p = -(jacobian\trapz_mismatch);
         % implement the backstepping to get the Newton step size
@@ -144,10 +121,7 @@ while t0<t_final
                 alpha = alpha/2;
             end
             if alpha<min_alpha
-%                 break
-                blockout=1;
                 fprintf('Algorithm failure in the newton step.\n');
-%                 break
                 return
             end
         end
@@ -161,9 +135,7 @@ while t0<t_final
     % check if a threshold was crossed
     if check_discrete
         xy1 = [x1;y1];
-        z1 = h(t1,xy1,[]); % here will go to endo_event file to check if there is
-                           % relay tripping (zero crossing) after the
-                           % solution 
+        z1 = h(t1,xy1,[]);
         % check to see if we hit a threshold
         ix              = aux([],1);
         hit_thresh = abs(z1)<opt.sim.eps_thresh;

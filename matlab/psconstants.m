@@ -115,7 +115,7 @@ if isempty(C)
 	C.ge.Qmin   = 5; % min reactive power output
 	C.ge.Vsp    = 6; % set point for the generator if PV or REF
     C.ge.mBase  = 7;% machine MVA base
-	C.ge.status = 8; % the generator status
+	C.ge.status = 8; C.ge.factor = C.ge.status; % the generator status and an alias
    	C.ge.Pmax   = 9; % max real power output
     C.ge.Pmin   = 10; % min real power output
     C.ge.mu_Pmax = 11; % sensitivity
@@ -227,10 +227,14 @@ if isempty(C)
     C.sh.current_P = 12; % the current active load
     C.sh.current_Q = 13; % the current reactive load
     C.sh.id     = 14; % unique id number for this shunt element.
-	C.sh.cols   = 14; % minimum number of columns
+    C.sh.frac_Q_S = 15;
+    C.sh.frac_Q_I = 16;
+    C.sh.frac_Q_Z = 17; 
+    C.sh.SF = 18;
+	C.sh.cols   = 18; % minimum number of columns
     % synonyms:   
 	C.shunt     = C.sh; % synonym
-    C.sh.col_names = {'bus','P','Q','frac_S','frac_Z','status','type','value','frac_E','gamma','near_genID','id'};
+    C.sh.col_names = {'bus','P','Q','frac_S','frac_Z','status','type','value','frac_E','gamma','near_genID','id','frac_Q_S','frac_Q_I','frac_Q_Z','SF'};
     
     %% event-related definitions
 
@@ -255,6 +259,8 @@ if isempty(C)
     C.event.close_shunt  = 19;          % connect this shunt
     C.event.relay_trigger = 21;         % triggered a generic relay
     C.event.em_control   = 22;          % activate emergency control 
+    C.event.ofgs_relay  = 50;           % triggered overfrequency generation shedding
+    C.event.shed_generation = 51;       % triggered overfrequency generation sheeding
     
     % columns 
     C.event.time       = 1; % event time in seconds
@@ -280,11 +286,13 @@ if isempty(C)
     %  uv: undervoltage
     %  ufls: underfrequency load shedding
     %  temp: temperature
+    %  ofgs: overfrequency generation shedding
     C.relay.oc   = 1;
     C.relay.dist = 2;
     C.relay.uvls = 3;
     C.relay.ufls = 4;
     C.relay.temp = 5;
+    C.relay.ofgs = 6;
     % relay columns
     C.relay.type            = 1;    % 
     C.relay.setting1        = 2;    % setting 1
